@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Microsoft.Xna.Framework.Input;
 using SoManyPixels.ArcEngine.A2D;
 using SoManyPixels.ArcEngine.A2D.Components;
 using SoManyPixels.ArcEngine.A2D.Entities;
@@ -12,6 +11,12 @@ using SoManyPixels.ArcEngine.A2D.Systems;
 
 namespace SoManyPixels.ReindeerRoundup.Game
 {
+    public enum PlayerThumbstick
+    {
+        Left,
+        Right
+    }
+
     public class PlayerScript : A2DScriptComponent
     {
         // Tunables in pixel units for frame-rate independent movement.
@@ -21,12 +26,10 @@ namespace SoManyPixels.ReindeerRoundup.Game
         const float Y_ACCELERATION = 2250.0f;   // px/s^2
         const float X_DECELERATION = 600.0f;   // px/s^2
         const float Y_DECELERATION = 600.0f;   // px/s^2
-        const float BULLET_SPEED = 18.0f;
-        const int PLAYER_SPRITE_WIDTH = 104;
-        const int PLAYER_SPRITE_HEIGHT = 96;
         A2DIntVector2 collisionActivatePosition = A2DIntVector2.Zero;
 
-        readonly BulletManager _bulletManager;
+        readonly int _gamePadSlot;
+        readonly PlayerThumbstick _thumbstick;
         A2DInputSystem _inputSystem;
 
         int _collisionCount = 0;
@@ -36,10 +39,13 @@ namespace SoManyPixels.ReindeerRoundup.Game
         float _positionY = 0.0f;
         bool _movementInitialized = false;
 
-        public PlayerScript(A2DEntityWorld world, BulletManager bulletManager)
+        // gamePadSlot is 0..3 (controller 1..4). For slot 0, the input system falls back to
+        // WASD (left stick) or IJKL (right stick) when no controller is connected.
+        public PlayerScript(A2DEntityWorld world, int gamePadSlot, PlayerThumbstick thumbstick)
         {
             _entityWorld = world;
-            _bulletManager = bulletManager;
+            _gamePadSlot = gamePadSlot;
+            _thumbstick = thumbstick;
         }
 
         public override bool OnUpdate(float elapsedtime)
@@ -47,13 +53,13 @@ namespace SoManyPixels.ReindeerRoundup.Game
             EnsureInputSystem();
 
             A2DTransformComponent transformComponent = GetComponent<A2DTransformComponent>();
-            A2DFloatVector leftStick = _inputSystem.GetPrimaryLeftStick();
+            A2DFloatVector stick = GetMovementStick();
             float dt = elapsedtime / 1000.0f;
 
             InitializeMovementState(transformComponent);
 
-            float targetVelocityX = leftStick.X * X_SPEED_MAX;
-            float targetVelocityY = -leftStick.Y * Y_SPEED_MAX;
+            float targetVelocityX = stick.X * X_SPEED_MAX;
+            float targetVelocityY = -stick.Y * Y_SPEED_MAX;
 
             _velocityX = MoveToward(
                 _velocityX,
@@ -71,53 +77,16 @@ namespace SoManyPixels.ReindeerRoundup.Game
             transformComponent.PositionX = (int)Math.Round(_positionX);
             transformComponent.PositionY = (int)Math.Round(_positionY);
 
-            TryFire();
-
             _collisionCount = 0;
 
             return true; // TODO: return type/value?
         }
 
-        void TryFire()
+        A2DFloatVector GetMovementStick()
         {
-            if (_bulletManager == null || !TryGetFireDirection(out A2DFloatVector fireDirection))
-            {
-                return;
-            }
-
-            WeaponBullet weapon = GetComponent<WeaponBullet>();
-            A2DTransformComponent transformComponent = GetComponent<A2DTransformComponent>();
-            if (weapon == null || transformComponent == null)
-            {
-                return;
-            }
-
-            int bulletCount = weapon.BulletCount;
-            if (bulletCount <= 0)
-            {
-                return;
-            }
-
-            float aimX = fireDirection.X / BULLET_SPEED;
-            float aimY = fireDirection.Y / BULLET_SPEED;
-            float spreadX = -aimY;
-            float spreadY = aimX;
-
-            A2DIntVector2 playerLocation = transformComponent.Position;
-            int originX = playerLocation.X + (PLAYER_SPRITE_WIDTH / 2);
-            int originY = playerLocation.Y + (PLAYER_SPRITE_HEIGHT / 2);
-            int muzzleDistance = PLAYER_SPRITE_WIDTH / 2;
-
-            for (int bulletCounter = 0; bulletCounter < bulletCount; bulletCounter++)
-            {
-                float spreadOffset = 28 + (bulletCounter * (56 / bulletCount)) - (PLAYER_SPRITE_HEIGHT / 2);
-
-                _bulletManager.SpawnBullet(
-                    new A2DIntVector2(
-                        (int)Math.Round(originX + (aimX * muzzleDistance) + (spreadX * spreadOffset)),
-                        (int)Math.Round(originY + (aimY * muzzleDistance) + (spreadY * spreadOffset))),
-                    fireDirection);
-            }
+            return _thumbstick == PlayerThumbstick.Left
+                ? _inputSystem.GetLeftStick(_gamePadSlot)
+                : _inputSystem.GetRightStick(_gamePadSlot);
         }
 
         void EnsureInputSystem()
@@ -133,64 +102,6 @@ namespace SoManyPixels.ReindeerRoundup.Game
                 throw new InvalidOperationException(
                     "PlayerScript requires A2DInputSystem to be registered on the entity world before update.");
             }
-        }
-
-        bool TryGetFireDirection(out A2DFloatVector fireDirection)
-        {
-            fireDirection = A2DFloatVector.Zero;
-
-            A2DFloatVector stick = _inputSystem.GetPrimaryRightStick();
-            if (IsZero(stick))
-            {
-                stick = GetKeyboardAimStick();
-            }
-
-            if (IsZero(stick))
-            {
-                return false;
-            }
-
-            float screenX = stick.X;
-            float screenY = -stick.Y;
-            float magnitude = (float)Math.Sqrt((screenX * screenX) + (screenY * screenY));
-            fireDirection = new A2DFloatVector(
-                (screenX / magnitude) * BULLET_SPEED,
-                (screenY / magnitude) * BULLET_SPEED);
-            return true;
-        }
-
-        A2DFloatVector GetKeyboardAimStick()
-        {
-            KeyboardState keyboardState = _inputSystem.KeyboardState;
-            float x = 0.0f;
-            float y = 0.0f;
-
-            if (keyboardState.IsKeyDown(Keys.I))
-            {
-                y += 1.0f;
-            }
-
-            if (keyboardState.IsKeyDown(Keys.K))
-            {
-                y -= 1.0f;
-            }
-
-            if (keyboardState.IsKeyDown(Keys.J))
-            {
-                x -= 1.0f;
-            }
-
-            if (keyboardState.IsKeyDown(Keys.L))
-            {
-                x += 1.0f;
-            }
-
-            return new A2DFloatVector(x, y);
-        }
-
-        static bool IsZero(A2DFloatVector vector)
-        {
-            return vector.X == 0.0f && vector.Y == 0.0f;
         }
 
         private static float MoveToward(float currentValue, float targetValue, float maxDelta)
