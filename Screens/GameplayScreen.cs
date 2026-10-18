@@ -61,7 +61,8 @@ namespace SoManyPixels.Reindeer_Roundup.Screens
             CreateFriendlyBulletPool();
             playerOneBulletManager = new BulletManager(ReindeerRoundupWorld, "FriendlyBullets", groupManager);
 
-            CreatePlayerEntity();
+            CreatePlayerEntity("PlayerOne", 80, 260, 0, PlayerThumbstick.Left);
+            CreatePlayerEntity("PlayerTwo", 80, 660, 0, PlayerThumbstick.Right);
 
             enemyBulletEntityId = ReindeerRoundupWorld.CreateEntity("EnemyBullet1");
             ReindeerRoundupWorld.ComponentFactory.CreateTransformComponent(enemyBulletEntityId, 0, 0, -3, 0, 0);
@@ -202,10 +203,10 @@ namespace SoManyPixels.Reindeer_Roundup.Screens
             return ((long)lowKind << 32) | (uint)highKind;
         }
 
-        void CreatePlayerEntity()
+        void CreatePlayerEntity(string name, int x, int y, int gamePadSlot, PlayerThumbstick thumbstick)
         {
-            int id = ReindeerRoundupWorld.CreateEntity("PlayerOne");
-            ReindeerRoundupWorld.ComponentFactory.CreateTransformComponent(id, 80, 260, 0, 0, 10);
+            int id = ReindeerRoundupWorld.CreateEntity(name);
+            ReindeerRoundupWorld.ComponentFactory.CreateTransformComponent(id, x, y, 0, 0, 10);
             ReindeerRoundupWorld.ComponentFactory.CreateSpriteComponent(id, "Killer Daisy", 104, 96);
             ReindeerRoundupWorld.ComponentFactory.CreateBoundingBoxComponent(id, "BoundingBoxLeft", 0, 16, 52, 64, CollisionKinds.Player);
             ReindeerRoundupWorld.ComponentFactory.CreateBoundingBoxComponent(id, "BoundingBoxTop", 16, 0, 72, 16, CollisionKinds.Player);
@@ -213,7 +214,7 @@ namespace SoManyPixels.Reindeer_Roundup.Screens
             ReindeerRoundupWorld.ComponentFactory.CreateBoundingBoxComponent(id, "BoundingBoxBottom", 16, 60, 72, 36, CollisionKinds.Player);
             ReindeerRoundupWorld.ComponentFactory.CreatePlayerStatsComponent(id, 3);
             ReindeerRoundupWorld.AddComponent(id, new WeaponBullet());
-            ReindeerRoundupWorld.AddComponent(id, new PlayerScript(ReindeerRoundupWorld, playerOneBulletManager));
+            ReindeerRoundupWorld.AddComponent(id, new PlayerScript(ReindeerRoundupWorld, gamePadSlot, thumbstick));
             ReindeerRoundupWorld.Start(id);
         }
 
@@ -302,7 +303,7 @@ namespace SoManyPixels.Reindeer_Roundup.Screens
             renderSystem.Draw();
 
 #if DEBUG
-            renderSystem.DrawBoundingBoxesDebug();
+            // renderSystem.DrawBoundingBoxesDebug();
             // Console.WriteLine(collisionSystem.ToString());
 #endif
 
